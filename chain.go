@@ -1,14 +1,20 @@
 // Package alice provides a convenient way to chain http handlers.
 package alice
 
-import "net/http"
+import (
+	"github.com/valyala/fasthttp"
+
+	"github.com/buaazp/fasthttprouter"
+)
+
+var DefaultServeMux = fasthttprouter.New()
 
 // A constructor for a piece of middleware.
 // Some middleware use this constructor out of the box,
 // so in most cases you can just pass somepackage.New
-type Constructor func(http.Handler) http.Handler
+type Constructor func(fasthttp.RequestHandler) fasthttp.RequestHandler
 
-// Chain acts as a list of http.Handler constructors.
+// Chain acts as a list of Handler constructors.
 // Chain is effectively immutable:
 // once created, it will always hold
 // the same set of constructors in the same order.
@@ -24,7 +30,7 @@ func New(constructors ...Constructor) Chain {
 	return Chain{append(([]Constructor)(nil), constructors...)}
 }
 
-// Then chains the middleware and returns the final http.Handler.
+// Then chains the middleware and returns the final Handler.
 //     New(m1, m2, m3).Then(h)
 // is equivalent to:
 //     m1(m2(m3(h)))
@@ -42,9 +48,9 @@ func New(constructors ...Constructor) Chain {
 // For proper middleware, this should cause no problems.
 //
 // Then() treats nil as http.DefaultServeMux.
-func (c Chain) Then(h http.Handler) http.Handler {
+func (c Chain) Then(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	if h == nil {
-		h = http.DefaultServeMux
+		h = DefaultServeMux.Handler
 	}
 
 	for i := range c.constructors {
@@ -52,21 +58,6 @@ func (c Chain) Then(h http.Handler) http.Handler {
 	}
 
 	return h
-}
-
-// ThenFunc works identically to Then, but takes
-// a HandlerFunc instead of a Handler.
-//
-// The following two statements are equivalent:
-//     c.Then(http.HandlerFunc(fn))
-//     c.ThenFunc(fn)
-//
-// ThenFunc provides all the guarantees of Then.
-func (c Chain) ThenFunc(fn http.HandlerFunc) http.Handler {
-	if fn == nil {
-		return c.Then(nil)
-	}
-	return c.Then(fn)
 }
 
 // Append extends a chain, adding the specified constructors
@@ -100,7 +91,7 @@ func (c Chain) Append(constructors ...Constructor) Chain {
 //
 // Another example:
 //  aHtmlAfterNosurf := alice.New(m2)
-// 	aHtml := alice.New(m1, func(h http.Handler) http.Handler {
+// 	aHtml := alice.New(m1, func(h Handler) Handler {
 // 		csrf := nosurf.New(h)
 // 		csrf.SetFailureHandler(aHtmlAfterNosurf.ThenFunc(csrfFail))
 // 		return csrf

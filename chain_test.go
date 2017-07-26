@@ -2,21 +2,25 @@
 package alice
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"bufio"
+
+	"github.com/valyala/fasthttp"
+
+	"bytes"
 )
 
 // A constructor for middleware
 // that writes its own "tag" into the RW and does nothing else.
 // Useful in checking if a chain is behaving in the right order.
 func tagMiddleware(tag string) Constructor {
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(tag))
-			h.ServeHTTP(w, r)
-		})
+	return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		return func(ctx *fasthttp.RequestCtx) {
+			ctx.Write([]byte(tag))
+			h(ctx)
+		}
 	}
 }
 
@@ -28,17 +32,17 @@ func funcsEqual(f1, f2 interface{}) bool {
 	return val1.Pointer() == val2.Pointer()
 }
 
-var testApp = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("app\n"))
-})
+var testApp = func(ctx *fasthttp.RequestCtx) {
+	ctx.Write([]byte("app\n"))
+}
 
 func TestNew(t *testing.T) {
-	c1 := func(h http.Handler) http.Handler {
+	c1 := func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return nil
 	}
 
-	c2 := func(h http.Handler) http.Handler {
-		return http.StripPrefix("potato", nil)
+	c2 := func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+		return nil
 	}
 
 	slice := []Constructor{c1, c2}
@@ -57,48 +61,39 @@ func TestThenWorksWithNoMiddleware(t *testing.T) {
 	}
 }
 
-func TestThenTreatsNilAsDefaultServeMux(t *testing.T) {
-	if New().Then(nil) != http.DefaultServeMux {
-		t.Error("Then does not treat nil as DefaultServeMux")
-	}
-}
-
-func TestThenFuncTreatsNilAsDefaultServeMux(t *testing.T) {
-	if New().ThenFunc(nil) != http.DefaultServeMux {
-		t.Error("ThenFunc does not treat nil as DefaultServeMux")
-	}
-}
-
 func TestThenFuncConstructsHandlerFunc(t *testing.T) {
-	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	})
-	chained := New().ThenFunc(fn)
-	rec := httptest.NewRecorder()
+	fn := func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetStatusCode(200)
+	}
+	chained := New().Then(fn)
 
-	chained.ServeHTTP(rec, (*http.Request)(nil))
+	var ctx fasthttp.RequestCtx
+	chained(&ctx)
 
-	if reflect.TypeOf(chained) != reflect.TypeOf((http.HandlerFunc)(nil)) {
+	if reflect.TypeOf(chained) != reflect.TypeOf((fasthttp.RequestHandler)(nil)) {
 		t.Error("ThenFunc does not construct HandlerFunc")
 	}
 }
+func newGetCtx(t *testing.T) *fasthttp.RequestCtx {
+	var ctx fasthttp.RequestCtx
 
+	s := "GET / HTTP/1.1\nHost: aaa.com\n\n"
+	br := bufio.NewReader(bytes.NewBufferString(s))
+	if err := ctx.Request.Read(br); err != nil {
+		t.Fatalf("cannot read request: %s", err)
+	}
+	return &ctx
+}
 func TestThenOrdersHandlersCorrectly(t *testing.T) {
 	t1 := tagMiddleware("t1\n")
 	t2 := tagMiddleware("t2\n")
 	t3 := tagMiddleware("t3\n")
 
 	chained := New(t1, t2, t3).Then(testApp)
+	ctx := newGetCtx(t)
 
-	w := httptest.NewRecorder()
-	r, err := http.NewRequest("GET", "/", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	chained.ServeHTTP(w, r)
-
-	if w.Body.String() != "t1\nt2\nt3\napp\n" {
+	chained(ctx)
+	if string(ctx.Response.Body()) != "t1\nt2\nt3\napp\n" {
 		t.Error("Then does not order handlers correctly")
 	}
 }
@@ -116,15 +111,11 @@ func TestAppendAddsHandlersCorrectly(t *testing.T) {
 
 	chained := newChain.Then(testApp)
 
-	w := httptest.NewRecorder()
-	r, err := http.NewRequest("GET", "/", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx := newGetCtx(t)
 
-	chained.ServeHTTP(w, r)
+	chained(ctx)
 
-	if w.Body.String() != "t1\nt2\nt3\nt4\napp\n" {
+	if string(ctx.Response.Body()) != "t1\nt2\nt3\nt4\napp\n" {
 		t.Error("Append does not add handlers correctly")
 	}
 }
@@ -155,15 +146,11 @@ func TestExtendAddsHandlersCorrectly(t *testing.T) {
 
 	chained := newChain.Then(testApp)
 
-	w := httptest.NewRecorder()
-	r, err := http.NewRequest("GET", "/", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx := newGetCtx(t)
 
-	chained.ServeHTTP(w, r)
+	chained(ctx)
 
-	if w.Body.String() != "t1\nt2\nt3\nt4\napp\n" {
+	if string(ctx.Response.Body()) != "t1\nt2\nt3\nt4\napp\n" {
 		t.Error("Extend does not add handlers in correctly")
 	}
 }

@@ -1,11 +1,11 @@
 # Alice 
 
-[![GoDoc](https://godoc.org/github.com/golang/gddo?status.svg)](http://godoc.org/github.com/justinas/alice)
-[![Build Status](https://travis-ci.org/justinas/alice.svg?branch=master)](https://travis-ci.org/justinas/alice)
-[![Coverage](http://gocover.io/_badge/github.com/justinas/alice)](http://gocover.io/github.com/justinas/alice)
+[![GoDoc](https://godoc.org/github.com/golang/gddo?status.svg)](http://godoc.org/github.com/zc310/alice)
+[![Build Status](https://travis-ci.org/justinas/alice.svg?branch=master)](https://travis-ci.org/zc310/alice)
+[![Coverage](http://gocover.io/_badge/github.com/justinas/alice)](http://gocover.io/github.com/zc310/alice)
 
 Alice provides a convenient way to chain 
-your HTTP middleware functions and the app handler.
+your fast HTTP middleware functions and the app handler.
 
 In short, it transforms
 
