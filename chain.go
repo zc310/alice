@@ -1,13 +1,13 @@
-// Package alice provides a convenient way to chain http handlers.
+// Package alice provides a convenient way to chain Fasthttp handlers.
 package alice
 
 import (
 	"github.com/valyala/fasthttp"
-
-	"github.com/buaazp/fasthttprouter"
 )
 
-var DefaultServeMux = fasthttprouter.New()
+var defaultHandler = func(ctx *fasthttp.RequestCtx) {
+	ctx.Error(fasthttp.StatusMessage(fasthttp.StatusNotFound), fasthttp.StatusNotFound)
+}
 
 // A constructor for a piece of middleware.
 // Some middleware use this constructor out of the box,
@@ -50,7 +50,7 @@ func New(constructors ...Constructor) Chain {
 // Then() treats nil as http.DefaultServeMux.
 func (c Chain) Then(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	if h == nil {
-		h = DefaultServeMux.Handler
+		h = defaultHandler
 	}
 
 	for i := range c.constructors {
